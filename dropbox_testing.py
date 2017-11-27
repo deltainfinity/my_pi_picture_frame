@@ -10,6 +10,7 @@ from dropbox.dropbox import Dropbox
 import os
 import datetime
 import time
+import shutil
 
 def main():
     dbx = Dropbox('mNkdY-ZvlnAAAAAAAAAAJdViEYG10v_XnP1Eil4E5z4kF9pEL1cW2TyKFuMKYxxi')
@@ -22,17 +23,30 @@ def process_entry(dbx, entry, photo_directory):
     if isinstance(entry, dropbox.files.FileMetadata):
         sync_file(dbx, entry, photo_directory)
     elif isinstance(entry, dropbox.files.FolderMetadata):
-        print entry.name + " is folder metadata."
+        sync_folder(entry, photo_directory)
     elif isinstance(entry, dropbox.files.DeletedMetadata):
-        print entry.name + " has been deleted."    
+        remove_deleted(entry, photo_directory)    
         
+def remove_deleted(entry, photo_directory):
+    file_path = format_path(entry.name, entry.path_display, photo_directory)
+    local_file_path = file_path + os.sep + entry.name
+    if os.path.exists(local_file_path):
+        if os.path.isdir(local_file_path):
+            shutil.rmtree(local_file_path)
+        else:
+            os.remove(local_file_path)
+    
+def sync_folder(entry, photo_directory):
+    folder_path = format_path('', entry.path_display, photo_directory)
+    if not os.path.exists(folder_path):
+        create_directory(folder_path)
+    
 def sync_file(dbx, entry, photo_directory):
     file_path = format_path(entry.name, entry.path_display, photo_directory)
     local_file_path = file_path + os.sep + entry.name
     #if the directory containing the file does not exist, create it
     #and all parent diretcories
     if not os.path.exists(file_path):
-        print "Creating file path: " + file_path
         directory_created = create_directory(file_path)
         if directory_created == True:
             #if the directory did not exist then download the file
@@ -54,7 +68,7 @@ def sync_file(dbx, entry, photo_directory):
             #the file sizes are different, download a new copy of the DropBox file
             if local_mtime_dt < entry.server_modified or local_file_size != entry.size:
                 download_to_file(dbx, local_file_path, entry.path_display)
-            
+        
 def format_path(file_name, path, photo_directory):
     os_specific_path = photo_directory + path.replace('/', os.sep)
     os_specific_path = os_specific_path.rstrip(file_name)
@@ -72,7 +86,6 @@ def create_directory(file_path):
     return True
 
 def download_to_file(dbx, local_file_path, dbx_file_path):
-    print "Downloading " + dbx_file_path + " to " + local_file_path
     try:
         dbx.files_download_to_file(local_file_path, dbx_file_path)
     except dropbox.exceptions.ApiError as e:
